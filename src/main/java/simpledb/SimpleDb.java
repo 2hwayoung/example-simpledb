@@ -84,8 +84,6 @@ public class SimpleDb{
     }
 
     public long insert(String expression, List<Object> params) {
-        System.out.println(expression);
-        System.out.println(params);
         try (PreparedStatement statement = this.connection.prepareStatement(expression, Statement.RETURN_GENERATED_KEYS)) {
             bindingParams(statement, params);
             statement.executeUpdate();
@@ -95,5 +93,15 @@ public class SimpleDb{
             e.printStackTrace();
         }
         return -1;
+    }
+
+    public int update(String expression, List<Object> params) {
+        try (PreparedStatement statement = this.connection.prepareStatement(expression)) {
+            bindingParams(statement, params);
+            return statement.executeUpdate();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return 0;
     }
 }

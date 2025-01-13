@@ -32,7 +32,7 @@ public class Sql {
     }
 
     public int update() {
-        return 0;
+        return simpleDb.update(sqlBuilder.toString(), params);
     }
 
     public int delete() {

@@ -36,7 +36,7 @@ public class Sql {
     }
 
     public int delete() {
-        return 0;
+        return simpleDb.delete(sqlBuilder.toString(), params);
     }
 
     public List<Map<String, Object>> selectRows() {

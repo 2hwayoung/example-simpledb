@@ -104,4 +104,15 @@ public class SimpleDb{
         }
         return 0;
     }
+
+    public int delete(String expression, List<Object> params) {
+        try (PreparedStatement statement = this.connection.prepareStatement(expression)) {
+            bindingParams(statement, params);
+            return statement.executeUpdate();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return 0;
+    }
+
 }

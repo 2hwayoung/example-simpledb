@@ -5,8 +5,7 @@ import lombok.Setter;
 import utils.DbUtil;
 
 import java.sql.*;
-import java.util.Arrays;
-import java.util.List;
+import java.util.*;
 
 @Getter
 public class SimpleDb{
@@ -115,4 +114,24 @@ public class SimpleDb{
         return 0;
     }
 
+    public List<Map<String, Object>> selectRows(String expression) {
+        try (PreparedStatement statement = this.connection.prepareStatement(expression)) {
+            ResultSet resultSet = statement.executeQuery();
+            List<Map<String, Object>> rows = new ArrayList<>();
+            while (resultSet.next()) {
+                Map<String, Object> row = new HashMap<>();
+                row.put("id", resultSet.getLong(1));
+                row.put("title", resultSet.getString(2));
+                row.put("body", resultSet.getString(3));
+                row.put("createdDate", resultSet.getTimestamp(4).toLocalDateTime());
+                row.put("modifiedDate", resultSet.getTimestamp(5).toLocalDateTime());
+                row.put("isBlind", resultSet.getBoolean(6));
+                rows.add(row);
+            }
+            return rows;
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return List.of();
+    }
 }

@@ -40,7 +40,7 @@ public class Sql {
     }
 
     public List<Map<String, Object>> selectRows() {
-        return List.of();
+        return simpleDb.selectRows(sqlBuilder.toString());
     }
 
     public <T> List<T> selectRows(Class<T> classname) {

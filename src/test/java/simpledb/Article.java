@@ -2,13 +2,14 @@ package simpledb;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
 @Getter
-@AllArgsConstructor
+@NoArgsConstructor
 public class Article {
-    private int id;
+    private Long id;
     private String title;
     private String body;
     private LocalDateTime createdDate;

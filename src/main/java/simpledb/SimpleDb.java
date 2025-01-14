@@ -129,6 +129,10 @@ public class SimpleDb{
         return _run(sql, List.class, params);
     }
 
+    public <T> List<T> selectRows(String sql, List<Object> params, Class<T> cls) {
+        return selectRows(sql, params).stream().map(m -> Util.mapToObject(m, cls)).toList();
+    }
+
     public void run(String sql, Object... params) {
         _run(sql, Integer.class, Arrays.stream(params).toList());
     }

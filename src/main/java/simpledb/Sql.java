@@ -103,6 +103,6 @@ public class Sql {
     }
 
     public List<Long> selectLongs() {
-        return List.of();
+        return simpleDb.selectLongs(sqlBuilder.toString(), params);
     }
 }

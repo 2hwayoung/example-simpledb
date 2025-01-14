@@ -106,6 +106,13 @@ public class SimpleDb{
         return _run(sql, Long.class, params);
     }
 
+    public List<Long> selectLongs(String sql, List<Object> params) {
+        List<Map<String, Object>> selectedRows = selectRows(sql, params);
+        return selectedRows.stream()
+                .map(row -> (Long) row.values().iterator().next())
+                .toList();
+    }
+
     public boolean selectBoolean(String sql, List<Object> params) {
         return _run(sql, Boolean.class, params);
     }
@@ -192,6 +199,5 @@ public class SimpleDb{
         }
         return row;
     }
-
 
 }

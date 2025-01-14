@@ -4,6 +4,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.stream.Collectors;
 
 public class Sql {
     private final StringBuilder sqlBuilder;
@@ -93,8 +94,12 @@ public class Sql {
         return simpleDb.selectBoolean(sqlBuilder.toString(), params);
     }
 
-    public Sql appendIn(String s, Object... args) {
-        return null;
+    public Sql appendIn(String sql, Object... args) {
+        String inClause = Arrays.stream(args)
+                .map(arg -> "?")
+                .collect(Collectors.joining(","));
+        sql = sql.replaceAll("\\?", inClause);
+        return this.append(sql, args);
     }
 
     public List<Long> selectLongs() {

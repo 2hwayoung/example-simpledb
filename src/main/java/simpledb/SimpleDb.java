@@ -2,9 +2,9 @@ package simpledb;
 
 import lombok.Getter;
 import lombok.Setter;
-import utils.DbUtil;
 
 import java.sql.*;
+import java.time.LocalDateTime;
 import java.util.*;
 
 @Getter
@@ -14,7 +14,7 @@ public class SimpleDb{
     private final String dbName;
     private final String baseUrl;
     private final String url;
-    private Connection connection;
+    private final Connection connection;
     @Setter
     private boolean devMode = true;
 
@@ -27,31 +27,27 @@ public class SimpleDb{
         try {
             ensureDatabaseExists();
             this.connection = DriverManager.getConnection(this.url, this.username, this.password);
-            System.out.println("Connected to " + this.url);
+            if (devMode) {
+                System.out.println("Connected to database successfully.");
+            }
         } catch (SQLException e) {
-            e.printStackTrace();
+            throw new RuntimeException("Failed to connect to database.", e);
         }
     }
 
     private void ensureDatabaseExists() throws SQLException {
-        try (Connection connection = DriverManager.getConnection(this.baseUrl, this.username, this.password)) {
-            Connection dbConnection = DriverManager.getConnection(this.url, this.username, this.password);
-        } catch (SQLSyntaxErrorException e) {
-            if (e.getSQLState().equals("42000")) {
-                System.out.println("Database does not exist. Creating database...");
-                DbUtil.createDatabase(this.baseUrl, this.username, this.password, this.dbName);
-            } else {
-                throw e;
-            }
-        }
-    }
+        String createDbSql = String.format("CREATE DATABASE IF NOT EXISTS %s", dbName);
 
-    public void run(String expression, Object... args) {
-        try(PreparedStatement statement = this.connection.prepareStatement(expression)){
-            bindingParams(statement, List.of(args));
-            statement.execute();
-        } catch (SQLException e) {
-            e.printStackTrace();
+        try (Connection connection = DriverManager.getConnection(this.baseUrl, this.username, this.password)){
+            try (Statement statement = connection.createStatement()) {
+                statement.executeUpdate(createDbSql);
+                System.out.printf("Database ensured: %s%n", dbName);
+            }
+        } catch (SQLSyntaxErrorException e) {
+            if ("42000".equals(e.getSQLState())) {
+                System.err.printf("Failed to create database: %s. Error: %s%n", dbName, e.getMessage());
+            }
+            throw e;
         }
     }
 
@@ -60,11 +56,26 @@ public class SimpleDb{
     }
 
     public void close() {
-
+        if (connection != null) {
+            try {
+                connection.close();
+                if (devMode) {
+                    System.out.println("데이터베이스 연결 종료.");
+                }
+            } catch (SQLException e) {
+                throw new RuntimeException("데이터베이스 연결 종료 실패: " + e.getMessage());
+            }
+        }
     }
 
     public void startTransaction() {
-
+        try {
+            if (this.connection != null) {
+                this.connection.setAutoCommit(false);
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
     }
 
     public void rollback() {
@@ -75,63 +86,112 @@ public class SimpleDb{
 
     }
 
-    public PreparedStatement bindingParams(PreparedStatement statement, List<Object> params) throws SQLException {
-        for (int i = 0; i < params.size(); i++) {
-            statement.setObject(i + 1, params.get(i));
-        }
-        return statement;
+    public long insert(String sql, List<Object> params) {
+        return _run(sql, Long.class, params);
     }
 
-    public long insert(String expression, List<Object> params) {
-        try (PreparedStatement statement = this.connection.prepareStatement(expression, Statement.RETURN_GENERATED_KEYS)) {
-            bindingParams(statement, params);
-            statement.executeUpdate();
-            ResultSet generatedKeys = statement.getGeneratedKeys();
-            if (generatedKeys.next()) return generatedKeys.getLong(1);
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-        return -1;
+    public int update(String sql, List<Object> params) {
+        return _run(sql, Integer.class, params);
     }
 
-    public int update(String expression, List<Object> params) {
-        try (PreparedStatement statement = this.connection.prepareStatement(expression)) {
-            bindingParams(statement, params);
-            return statement.executeUpdate();
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-        return 0;
+    public int delete(String sql, List<Object> params) {
+        return _run(sql, Integer.class, params);
     }
 
-    public int delete(String expression, List<Object> params) {
-        try (PreparedStatement statement = this.connection.prepareStatement(expression)) {
-            bindingParams(statement, params);
-            return statement.executeUpdate();
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-        return 0;
+    public String selectString(String sql, List<Object> params) {
+        return _run(sql, String.class, params);
     }
 
-    public List<Map<String, Object>> selectRows(String expression) {
-        try (PreparedStatement statement = this.connection.prepareStatement(expression)) {
-            ResultSet resultSet = statement.executeQuery();
-            List<Map<String, Object>> rows = new ArrayList<>();
-            while (resultSet.next()) {
-                Map<String, Object> row = new HashMap<>();
-                row.put("id", resultSet.getLong(1));
-                row.put("title", resultSet.getString(2));
-                row.put("body", resultSet.getString(3));
-                row.put("createdDate", resultSet.getTimestamp(4).toLocalDateTime());
-                row.put("modifiedDate", resultSet.getTimestamp(5).toLocalDateTime());
-                row.put("isBlind", resultSet.getBoolean(6));
-                rows.add(row);
+    public Long selectLong(String sql, List<Object> params) {
+        return _run(sql, Long.class, params);
+    }
+
+    public boolean selectBoolean(String sql, List<Object> params) {
+        return _run(sql, Boolean.class, params);
+    }
+
+    public LocalDateTime selectDateTime(String sql, List<Object> params) {
+        return _run(sql, LocalDateTime.class, params);
+    }
+
+    public Map<String, Object> selectRow(String sql, List<Object> params) {
+        return _run(sql, Map.class, params);
+    }
+
+    public List<Map<String, Object>> selectRows(String sql, List<Object> params) {
+        return _run(sql, List.class, params);
+    }
+
+    public void run(String sql, Object... params) {
+        _run(sql, Integer.class, Arrays.stream(params).toList());
+    }
+
+    private <T> T _run(String sql, Class<T> cls, List<Object> params) {
+        try(PreparedStatement stmt = this.connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)){
+            setParams(stmt, params);
+            if (sql.startsWith("SELECT")) {
+                ResultSet rs = stmt.executeQuery();
+                return parseResultSet(rs, cls);
             }
-            return rows;
+            if (sql.startsWith("INSERT") & cls == Long.class) {
+                stmt.executeUpdate();
+                ResultSet generatedKeys = stmt.getGeneratedKeys();
+                if (generatedKeys.next()) {
+                    return cls.cast(generatedKeys.getLong(1));
+                }
+            }
+
+            return cls.cast(stmt.executeUpdate());
         } catch (SQLException e) {
-            e.printStackTrace();
+            throw new RuntimeException("Failed to execute query: %s%n%s".formatted(sql, e.getMessage()));
         }
-        return List.of();
     }
+
+    private PreparedStatement setParams(PreparedStatement stmt, List<Object> params) throws SQLException {
+        for (int i = 0; i < params.size(); i++) {
+            stmt.setObject(i + 1, params.get(i));
+        }
+        return stmt;
+    }
+
+    private <T> T parseResultSet(ResultSet rs, Class<T> cls) throws SQLException {
+        if(cls == Boolean.class) {
+            rs.next();
+            return cls.cast((rs.getBoolean(1)));
+        } else if(cls == String.class){
+            rs.next();
+            return cls.cast(rs.getString(1));
+        } else if(cls == Long.class){
+            rs.next();
+            return cls.cast(rs.getLong(1));
+        } else if(cls == LocalDateTime.class){
+            rs.next();
+            return cls.cast(rs.getTimestamp(1).toLocalDateTime());
+        } else if(cls == Map.class) {
+            rs.next();
+            return cls.cast(resultSetRowToMap(rs));
+        } else if(cls == List.class) {
+            List<Map<String, Object>> rows = new ArrayList<>();
+            while(rs.next()) {
+                rows.add(resultSetRowToMap(rs));
+            }
+            return cls.cast(rows);
+        }
+        throw new RuntimeException();
+    }
+
+    private Map<String, Object> resultSetRowToMap(ResultSet rs) throws SQLException {
+        Map<String, Object> row = new HashMap<>();
+
+        ResultSetMetaData metaData = rs.getMetaData();
+        int columnCount = metaData.getColumnCount();
+
+        for (int i = 1; i <= columnCount; i++) {
+            String cname = metaData.getColumnName(i);
+            row.put(cname, rs.getObject(i));
+        }
+        return row;
+    }
+
+
 }

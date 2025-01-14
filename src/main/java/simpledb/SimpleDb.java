@@ -125,6 +125,10 @@ public class SimpleDb{
         return _run(sql, Map.class, params);
     }
 
+    public <T> T selectRow(String sql, List<Object> params, Class<T> cls) {
+        return Util.mapToObject(selectRow(sql, params), cls);
+    }
+
     public List<Map<String, Object>> selectRows(String sql, List<Object> params) {
         return _run(sql, List.class, params);
     }

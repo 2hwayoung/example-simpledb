@@ -52,6 +52,10 @@ public class Sql {
         return simpleDb.selectRow(sqlBuilder.toString(), params);
     }
 
+    public <T> T selectRow(Class<T> cls) {
+        return simpleDb.selectRow(sqlBuilder.toString(), params, cls);
+    }
+
     public LocalDateTime selectDatetime() {
         return simpleDb.selectDateTime(sqlBuilder.toString(), params);
     }

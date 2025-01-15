@@ -60,10 +60,10 @@ public class SimpleDb{
             try {
                 connection.close();
                 if (devMode) {
-                    System.out.println("데이터베이스 연결 종료.");
+                    System.out.println("Close database successfully.");
                 }
             } catch (SQLException e) {
-                throw new RuntimeException("데이터베이스 연결 종료 실패: " + e.getMessage());
+                throw new RuntimeException("Failed to close database connection. "+ e.getMessage());
             }
         }
     }
@@ -142,6 +142,7 @@ public class SimpleDb{
     }
 
     private <T> T _run(String sql, Class<T> cls, List<Object> params) {
+        System.out.println("sql : " + sql);
         try(PreparedStatement stmt = this.connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)){
             setParams(stmt, params);
             if (sql.startsWith("SELECT")) {

@@ -14,7 +14,8 @@ public class SimpleDb{
     private final String dbName;
     private final String baseUrl;
     private final String url;
-    private final Connection connection;
+    private Map<String, Connection> connections;
+
     @Setter
     private boolean devMode = true;
 
@@ -23,10 +24,10 @@ public class SimpleDb{
         this.password = password;
         this.dbName = dbName;
         this.baseUrl = "jdbc:mysql://%s:3306".formatted(host);
-        this.url = "%s/%s".formatted(baseUrl, dbName);
+        this.url = "%s/%s?autoReconnect=true&connectTimeout=30000&socketTimeout=30000".formatted(baseUrl, dbName);
+        this.connections = new HashMap<>();
         try {
             ensureDatabaseExists();
-            this.connection = DriverManager.getConnection(this.url, this.username, this.password);
             if (devMode) {
                 System.out.println("Connected to database successfully.");
             }
@@ -35,19 +36,23 @@ public class SimpleDb{
         }
     }
 
+    private Connection getCurrentThreadConnection() throws SQLException {
+        Connection connection = connections.get(Thread.currentThread().getName());
+        if (connection == null) {
+            Connection currentThreadConnection = DriverManager.getConnection(this.url, this.username, this.password);
+            connections.put(Thread.currentThread().getName(), currentThreadConnection);
+            return currentThreadConnection;
+        }
+        return connection;
+    }
+
     private void ensureDatabaseExists() throws SQLException {
         String createDbSql = String.format("CREATE DATABASE IF NOT EXISTS %s", dbName);
 
-        try (Connection connection = DriverManager.getConnection(this.baseUrl, this.username, this.password)){
-            try (Statement statement = connection.createStatement()) {
-                statement.executeUpdate(createDbSql);
-                System.out.printf("Database ensured: %s%n", dbName);
-            }
-        } catch (SQLSyntaxErrorException e) {
-            if ("42000".equals(e.getSQLState())) {
-                System.err.printf("Failed to create database: %s. Error: %s%n", dbName, e.getMessage());
-            }
-            throw e;
+        try (Connection baseConnection = DriverManager.getConnection(this.baseUrl, this.username, this.password);
+            Statement statement = baseConnection.createStatement()){
+            statement.executeUpdate(createDbSql);
+            System.out.printf("Database ensured: %s%n", dbName);
         }
     }
 
@@ -56,34 +61,38 @@ public class SimpleDb{
     }
 
     public void close() {
-        if (connection != null) {
-            try {
-                connection.close();
-                if (devMode) {
-                    System.out.println("Close database successfully.");
-                }
-            } catch (SQLException e) {
-                throw new RuntimeException("Failed to close database connection. "+ e.getMessage());
+        try {
+            getCurrentThreadConnection().close();
+            if (devMode) {
+                System.out.println("Close database successfully.");
             }
+        } catch (SQLException e) {
+            throw new RuntimeException("Failed to close database connection. "+ e.getMessage());
         }
     }
 
     public void startTransaction() {
         try {
-            if (this.connection != null) {
-                this.connection.setAutoCommit(false);
-            }
+            getCurrentThreadConnection().setAutoCommit(false);
         } catch (SQLException e) {
-            e.printStackTrace();
+            throw new RuntimeException("Failed to start transaction. "+ e.getMessage());
         }
     }
 
     public void rollback() {
-
+        try {
+            getCurrentThreadConnection().rollback();
+        } catch (SQLException e) {
+            throw new RuntimeException("Failed to rollback transaction. "+ e.getMessage());
+        }
     }
 
     public void commit() {
-
+        try {
+            getCurrentThreadConnection().commit();
+        } catch (SQLException e) {
+            throw new RuntimeException("Failed to commit transaction. "+ e.getMessage());
+        }
     }
 
     public long insert(String sql, List<Object> params) {
@@ -143,7 +152,7 @@ public class SimpleDb{
 
     private <T> T _run(String sql, Class<T> cls, List<Object> params) {
         System.out.println("sql : " + sql);
-        try(PreparedStatement stmt = this.connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)){
+        try(PreparedStatement stmt = getCurrentThreadConnection().prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)){
             setParams(stmt, params);
             if (sql.startsWith("SELECT")) {
                 ResultSet rs = stmt.executeQuery();
